@@ -13,9 +13,9 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { baseColumns } from './_shared.js';
-import { assetClass, dataUploadStatus, dataVersionStatus } from './enums.js';
-import { user } from './auth.js';
+import { baseColumns } from './_shared';
+import { assetClass, dataUploadStatus, dataVersionStatus } from './enums';
+import { user } from './auth';
 
 export const provider = pgTable('provider', {
   ...baseColumns,

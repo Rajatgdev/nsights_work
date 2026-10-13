@@ -6,7 +6,7 @@ import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { sql } from 'drizzle-orm';
 import ws from 'ws';
-import * as schema from './schema/index.js';
+import * as schema from './schema/index';
 
 // Node needs a WebSocket implementation for the Neon serverless driver.
 if (typeof WebSocket === 'undefined') {
@@ -53,4 +53,4 @@ export async function withTenant<T>(
 }
 
 export { schema };
-export * from './schema/index.js';
+export * from './schema/index';

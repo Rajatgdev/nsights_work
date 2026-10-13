@@ -9,7 +9,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { baseColumns } from './_shared.js';
+import { baseColumns } from './_shared';
 import {
   compareMode,
   exportFormat,
@@ -22,10 +22,10 @@ import {
   privacyRequestStatus,
   rebalancing,
   slideKind,
-} from './enums.js';
-import { organization, user } from './auth.js';
-import { fund, dataVersion } from './fund-data.js';
-import { templateIdEnumValues } from './_literals.js';
+} from './enums';
+import { organization, user } from './auth';
+import { fund, dataVersion } from './fund-data';
+import { templateIdEnumValues } from './_literals';
 
 export const portfolio = pgTable('portfolio', {
   ...baseColumns,

@@ -7,9 +7,9 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { baseColumns } from './_shared.js';
-import { organization, user } from './auth.js';
-import { templateIdEnumValues } from './_literals.js';
+import { baseColumns } from './_shared';
+import { organization, user } from './auth';
+import { templateIdEnumValues } from './_literals';
 
 export const firmSettings = pgTable('firm_settings', {
   firmId: uuid('firm_id')

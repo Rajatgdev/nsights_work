@@ -13,7 +13,7 @@ import {
   uuid,
   unique,
 } from 'drizzle-orm/pg-core';
-import { firmRole, firmStatus } from './enums.js';
+import { firmRole, firmStatus } from './enums';
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),

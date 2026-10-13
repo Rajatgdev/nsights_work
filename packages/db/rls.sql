@@ -1,13 +1,10 @@
 -- ─────────────────────────────────────────────────────────────
 -- Row-Level Security (build spec §4.3)
--- Apply AFTER drizzle migrations, as a superuser/owner role.
--- Idempotent where practical (drop policy if exists before create).
+-- Apply AFTER drizzle migrations, as the owner role.
+-- Idempotent where practical.
 -- ─────────────────────────────────────────────────────────────
 
 -- App roles ---------------------------------------------------
--- app_user     : the application connects as this (no BYPASSRLS).
--- app_platform : platform/admin jobs (BYPASSRLS) for shared fund data + admin.
--- Create roles once (NOLOGIN group roles; grant to the login role in Neon).
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
@@ -18,7 +15,7 @@ BEGIN
   END IF;
 END$$;
 
--- Helper: current firm id from the transaction-local setting.
+-- Context helpers ---------------------------------------------
 CREATE OR REPLACE FUNCTION app_current_firm() RETURNS uuid
   LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('app.firm_id', true), '')::uuid $$;
 CREATE OR REPLACE FUNCTION app_current_user() RETURNS text
@@ -26,31 +23,53 @@ CREATE OR REPLACE FUNCTION app_current_user() RETURNS text
 CREATE OR REPLACE FUNCTION app_current_role() RETURNS text
   LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('app.role', true), '') $$;
 
--- Tenant isolation macro applied to every tenant table ---------
--- (firm_id column must exist on the table)
+-- Tenant isolation on tables that have a firm_id column ---------
 DO $$
 DECLARE
   t text;
-  tenant_tables text[] := ARRAY[
+  firm_id_tables text[] := ARRAY[
     'portfolio','portfolio_holding','presentation','slide','export',
-    'firm_settings','team_member','firm_profile','member','invitation',
-    'subscription','privacy_request','support_grant','terms_acceptance'
+    'firm_settings','team_member','firm_profile','subscription',
+    'privacy_request','support_grant'
   ];
 BEGIN
-  FOREACH t IN ARRAY tenant_tables LOOP
+  FOREACH t IN ARRAY firm_id_tables LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
-    -- terms_acceptance keys on user, not firm; handled separately below
-    IF t <> 'terms_acceptance' THEN
-      EXECUTE format($f$
-        CREATE POLICY tenant_isolation ON %I
-          USING (firm_id = app_current_firm())
-          WITH CHECK (firm_id = app_current_firm())
-      $f$, t);
-    END IF;
+    EXECUTE format($f$
+      CREATE POLICY tenant_isolation ON %I
+        USING (firm_id = app_current_firm())
+        WITH CHECK (firm_id = app_current_firm())
+    $f$, t);
   END LOOP;
 END$$;
+
+-- member + invitation key on organization_id (= firm id) --------
+DO $$
+DECLARE
+  t text;
+  org_id_tables text[] := ARRAY['member','invitation'];
+BEGIN
+  FOREACH t IN ARRAY org_id_tables LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
+    EXECUTE format($f$
+      CREATE POLICY tenant_isolation ON %I
+        USING (organization_id = app_current_firm())
+        WITH CHECK (organization_id = app_current_firm())
+    $f$, t);
+  END LOOP;
+END$$;
+
+-- terms_acceptance keys on user, not firm ----------------------
+ALTER TABLE terms_acceptance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE terms_acceptance FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS own_terms ON terms_acceptance;
+CREATE POLICY own_terms ON terms_acceptance
+  USING (user_id = app_current_user())
+  WITH CHECK (user_id = app_current_user());
 
 -- Personal-portfolio visibility (restrictive, spec §4.3) -------
 DROP POLICY IF EXISTS personal_owner ON portfolio;
@@ -61,7 +80,7 @@ CREATE POLICY personal_owner ON portfolio AS RESTRICTIVE
     OR app_current_role() = 'firm_admin'
   );
 
--- Audit log: append-only (no UPDATE/DELETE for app_user) --------
+-- Audit log: append-only ---------------------------------------
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_log FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS audit_tenant_select ON audit_log;
@@ -70,11 +89,8 @@ CREATE POLICY audit_tenant_select ON audit_log FOR SELECT
 DROP POLICY IF EXISTS audit_insert ON audit_log;
 CREATE POLICY audit_insert ON audit_log FOR INSERT
   WITH CHECK (firm_id = app_current_firm() OR firm_id IS NULL);
-REVOKE UPDATE, DELETE ON audit_log FROM app_user;
 
--- Shared fund-data tables: readable by app_user, writable only by platform.
--- (provider, fund, data_version, fund_price, fund_fact_version, fund_metric,
---  stress_event, forbidden_term, data_upload, platform_state)
+-- Shared fund-data tables: readable by app_user ----------------
 DO $$
 DECLARE
   t text;
@@ -88,13 +104,16 @@ BEGIN
   END LOOP;
 END$$;
 
--- Platform-only tables: no grant to app_user at all.
+-- Platform-only tables: no app_user access ---------------------
 REVOKE ALL ON data_upload, platform_state FROM app_user;
 
--- Default: app_user gets DML on tenant tables (RLS still filters rows).
+-- DML grants on tenant + audit tables (RLS still filters rows) --
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   portfolio, portfolio_holding, presentation, slide, export,
   firm_settings, team_member, firm_profile, member, invitation,
   subscription, privacy_request, support_grant, terms_acceptance,
   audit_log
   TO app_user;
+
+-- audit_log is append-only for app_user
+REVOKE UPDATE, DELETE ON audit_log FROM app_user;

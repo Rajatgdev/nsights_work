@@ -1,0 +1,26 @@
+{
+  "name": "@nsights/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nsights/calc": "workspace:*",
+    "@nsights/charts": "workspace:*",
+    "@nsights/commentary": "workspace:*",
+    "@nsights/db": "workspace:*",
+    "@nsights/export": "workspace:*",
+    "@nsights/shared": "workspace:*",
+    "bullmq": "^5.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

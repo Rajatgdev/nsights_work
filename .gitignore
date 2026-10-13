@@ -18,6 +18,9 @@ out/
 /storage/
 /.storage/
 
+# dev seed dataset (modelled/licensed prices — not committed; see docs/DEFERRED_WORK.md)
+packages/db/data/dataset-default.json
+
 # os / editor
 *.DS_Store
 .vscode/*

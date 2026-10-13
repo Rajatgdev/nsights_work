@@ -11,7 +11,7 @@
  */
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { organization, admin as adminPlugin } from 'better-auth/plugins';
+import { organization, admin as adminPlugin, twoFactor } from 'better-auth/plugins';
 import { db, schema } from '@nsights/db';
 import { sendEmail } from './email';
 
@@ -70,6 +70,9 @@ export const auth = betterAuth({
       },
     }),
     adminPlugin(),
+    twoFactor({
+      issuer: 'nSights',
+    }),
   ],
 });
 

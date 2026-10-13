@@ -10,8 +10,8 @@
  * their own guards.
  */
 import { createMiddleware } from 'hono/factory';
-import { eq, and } from 'drizzle-orm';
-import { db, schema } from '@nsights/db';
+import { sql } from 'drizzle-orm';
+import { db } from '@nsights/db';
 import type { AppEnv, FirmMembership, SessionUser } from '../context';
 import { auth } from '../auth';
 
@@ -63,33 +63,32 @@ async function getSession(req: Request): Promise<LoadedSession | null> {
   const activeOrgId = (result.session as { activeOrganizationId?: string })
     .activeOrganizationId;
 
-  // Find the membership row (active org if set, else any). Loaded as OWNER-free
-  // read: this runs on the app connection but member rows are keyed by user id.
-  const rows = await db
-    .select({
-      firmId: schema.member.organizationId,
-      role: schema.member.role,
-      canEditHousePortfolios: schema.member.canEditHousePortfolios,
-      canDownload: schema.member.canDownload,
-      firmStatus: schema.organization.status,
-    })
-    .from(schema.member)
-    .innerJoin(schema.organization, eq(schema.member.organizationId, schema.organization.id))
-    .where(
-      activeOrgId
-        ? and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, activeOrgId))
-        : eq(schema.member.userId, user.id),
-    )
-    .limit(1);
+  // Bootstrap lookup: a user's memberships must be read BEFORE firm context is
+  // known, so RLS on `member` would hide them. We call the SECURITY DEFINER
+  // function app_user_memberships(), which safely returns only this user's rows.
+  const queryResult = await db.execute(
+    sql`select firm_id, role, can_edit_house_portfolios, can_download, firm_status
+        from app_user_memberships(${user.id})`,
+  );
+  const allRows = queryResult.rows as {
+    firm_id: string;
+    role: FirmMembership['role'];
+    can_edit_house_portfolios: boolean;
+    can_download: boolean;
+    firm_status: FirmMembership['firmStatus'];
+  }[];
 
-  const m = rows[0];
-  const membership: FirmMembership | undefined = m
+  // Active org if the session names one, else the first membership.
+  const picked =
+    (activeOrgId && allRows.find((r) => r.firm_id === activeOrgId)) || allRows[0];
+
+  const membership: FirmMembership | undefined = picked
     ? {
-        firmId: m.firmId,
-        role: m.role,
-        canEditHousePortfolios: m.canEditHousePortfolios,
-        canDownload: m.canDownload,
-        firmStatus: m.firmStatus,
+        firmId: picked.firm_id,
+        role: picked.role,
+        canEditHousePortfolios: picked.can_edit_house_portfolios,
+        canDownload: picked.can_download,
+        firmStatus: picked.firm_status,
       }
     : undefined;
 

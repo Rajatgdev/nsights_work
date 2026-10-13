@@ -117,3 +117,34 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
 
 -- audit_log is append-only for app_user
 REVOKE UPDATE, DELETE ON audit_log FROM app_user;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- Session bootstrap: read a user's own memberships before any firm
+-- context exists (RLS on `member` would otherwise hide them).
+-- SECURITY DEFINER = runs as the function owner, bypassing RLS, but ONLY
+-- for this one vetted, read-only, user-scoped lookup. `member` stays fully
+-- RLS-protected for every other code path.
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION app_user_memberships(p_user_id text)
+  RETURNS TABLE (
+    firm_id uuid,
+    role firm_role,
+    can_edit_house_portfolios boolean,
+    can_download boolean,
+    firm_status firm_status
+  )
+  LANGUAGE sql
+  SECURITY DEFINER
+  SET search_path = public
+  STABLE
+AS $$
+  SELECT m.organization_id, m.role, m.can_edit_house_portfolios, m.can_download, o.status
+  FROM member m
+  JOIN organization o ON o.id = m.organization_id
+  WHERE m.user_id = p_user_id
+$$;
+
+-- Let the app role execute it; revoke from PUBLIC for tightness.
+REVOKE ALL ON FUNCTION app_user_memberships(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_user_memberships(text) TO app_user;

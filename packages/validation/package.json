@@ -1,0 +1,22 @@
+{
+    "name": "@nsights/validation",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "exports": { ".": "./src/index.ts" },
+    "scripts": {
+      "typecheck": "tsc --noEmit",
+      "build": "tsc --noEmit",
+      "test": "vitest run --passWithNoTests"
+    },
+    "dependencies": {
+      "@nsights/shared": "workspace:*",
+      "exceljs": "^4.4.0"
+    },
+    "devDependencies": {
+      "typescript": "^5.7.3",
+      "vitest": "^2.1.8"
+    }
+  }

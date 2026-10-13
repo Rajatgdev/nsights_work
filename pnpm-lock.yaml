@@ -152,6 +152,9 @@ importers:
       '@nsights/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@nsights/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       bullmq:
         specifier: ^5.34.5
         version: 5.81.5

@@ -13,6 +13,7 @@ import {
   type JobPayloadMap,
 } from '@nsights/shared';
 import { recalculateVersion } from './recalculate.js';
+import { processValidateUpload } from './validate-upload.js';
 
 // Load monorepo-root .env so the worker sees DATABASE_URL / REDIS_URL.
 config({ path: resolve(process.cwd(), '../../.env') });
@@ -26,8 +27,11 @@ type Handlers = {
 
 const handlers: Handlers = {
   'validate-upload': async (p) => {
-    // milestone 2: fetch file from storage → parse + validate → draft version
-    console.log('[validate-upload]', p.uploadId, '(not implemented)');
+    console.log('[validate-upload] start upload=', p.uploadId);
+    const r = await processValidateUpload(p.uploadId);
+    console.log(
+      `[validate-upload] done upload=${r.uploadId} status=${r.status} errors=${r.errors} warnings=${r.warnings} version=${r.createdVersionId ?? '(none)'}`,
+    );
   },
   recalculate: async (p) => {
     console.log('[recalculate] start version=', p.versionId ?? '(live)');

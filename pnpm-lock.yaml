@@ -131,6 +131,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@neondatabase/serverless':
+        specifier: ^0.10.4
+        version: 0.10.4
       '@nsights/calc':
         specifier: workspace:*
         version: link:../../packages/calc
@@ -152,10 +155,19 @@ importers:
       bullmq:
         specifier: ^5.34.5
         version: 5.81.5
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
+      ws:
+        specifier: ^8.18.0
+        version: 8.22.0
     devDependencies:
       '@types/node':
         specifier: ^22.10.5
         version: 22.20.5
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.2
       tsx:
         specifier: ^4.19.2
         version: 4.23.15

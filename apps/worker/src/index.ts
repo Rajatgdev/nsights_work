@@ -5,11 +5,18 @@
  * the relevant milestone fills in.
  */
 import { Worker, type Job } from 'bullmq';
+import { config } from 'dotenv';
+import { resolve } from 'node:path';
 import {
   QUEUE_NAMES,
   redisConnectionFromEnv,
   type JobPayloadMap,
 } from '@nsights/shared';
+import { recalculateVersion } from './recalculate.js';
+
+// Load monorepo-root .env so the worker sees DATABASE_URL / REDIS_URL.
+config({ path: resolve(process.cwd(), '../../.env') });
+config({ path: resolve(process.cwd(), '.env') });
 
 const connection = redisConnectionFromEnv();
 
@@ -23,8 +30,11 @@ const handlers: Handlers = {
     console.log('[validate-upload]', p.uploadId, '(not implemented)');
   },
   recalculate: async (p) => {
-    // milestone 2: compute fund_metric rows for version → flip live pointer
-    console.log('[recalculate]', p.versionId, '(not implemented)');
+    console.log('[recalculate] start version=', p.versionId ?? '(live)');
+    const r = await recalculateVersion(p.versionId);
+    console.log(
+      `[recalculate] done version=${r.versionId} funds=${r.funds} metricRows=${r.metricRows} months=${r.months}`,
+    );
   },
   export: async (p) => {
     // milestone 5: build chart PNGs (SSR) → PPTX/PDF → forbidden scan → storage

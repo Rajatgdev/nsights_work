@@ -1,4 +1,9 @@
 import type { NextConfig } from 'next';
+import { config } from 'dotenv';
+import { resolve } from 'node:path';
+
+// Load the monorepo-root .env so the web app (API routes, db client) sees it.
+config({ path: resolve(process.cwd(), '../../.env') });
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

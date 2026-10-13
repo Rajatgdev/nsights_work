@@ -17,7 +17,8 @@
     "push": "drizzle-kit push",
     "apply-rls": "tsx src/apply-rls.ts",
     "seed": "tsx src/seed/index.ts",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "rls-check": "vitest run src/__tests__/rls.test.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

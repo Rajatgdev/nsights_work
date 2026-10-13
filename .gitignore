@@ -14,9 +14,10 @@ out/
 .env.*
 !.env.example
 
-# storage (Railway volume; local dev disk)
-/storage/
-/.storage/
+# storage (Railway volume; local dev disk) — any level, incl. apps/*/.storage
+storage/
+.storage/
+*.xlsx
 
 # dev seed dataset (modelled/licensed prices — not committed; see docs/DEFERRED_WORK.md)
 packages/db/data/dataset-default.json

@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "recalc": "tsx src/enqueue-recalc.ts"
+    "recalc": "tsx src/enqueue-recalc.ts",
+    "enqueue-upload": "tsx src/enqueue-upload.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

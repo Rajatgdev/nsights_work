@@ -1,16 +1,19 @@
 /**
  * Session + firm-context middleware (build spec §3.2).
  *
- * Pipeline: getSession → load membership (role, flags) + firm.status →
- * block writes on paused/cancelled firms → permission guard (per route) →
- * downstream handlers run inside withTenant() which sets the RLS context.
+ * Pipeline: Better Auth getSession → load membership (role, flags) + firm.status
+ * → block writes on paused/cancelled firms → (per-route permission guards) →
+ * handlers run inside withTenant() which sets the RLS context.
  *
- * At scaffold stage the Better Auth call is stubbed behind getSession(); the
- * real wiring lands in milestone 1. The SHAPE (what is enforced, in what order)
- * is in place so routes can rely on c.get('user') / c.get('membership').
+ * A signed-in user may have NO firm yet (just registered, or a platform admin):
+ * that is valid — `membership` is simply absent and firm-scoped routes 403 via
+ * their own guards.
  */
 import { createMiddleware } from 'hono/factory';
-import type { AppEnv } from '../context';
+import { eq, and } from 'drizzle-orm';
+import { db, schema } from '@nsights/db';
+import type { AppEnv, FirmMembership, SessionUser } from '../context';
+import { auth } from '../auth';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -37,14 +40,58 @@ export const sessionMiddleware = createMiddleware<AppEnv>(async (c, next) => {
   await next();
 });
 
-// ── Stub: replaced by Better Auth in milestone 1 ──────────────
-interface StubSession {
-  user: AppEnv['Variables']['user'];
-  membership?: AppEnv['Variables']['membership'];
+interface LoadedSession {
+  user: SessionUser;
+  membership?: FirmMembership;
 }
 
-async function getSession(_req: Request): Promise<StubSession | null> {
-  // TODO(milestone-1): auth.api.getSession({ headers }) + load member row.
-  // Returning null keeps all authed routes locked until wired.
-  return null;
+/**
+ * Resolve the Better Auth session, then load the active firm membership.
+ * The "active firm" is session.activeOrganizationId when set, else the user's
+ * first membership.
+ */
+async function getSession(req: Request): Promise<LoadedSession | null> {
+  const result = await auth.api.getSession({ headers: req.headers });
+  if (!result?.user) return null;
+
+  const user: SessionUser = {
+    id: result.user.id,
+    email: result.user.email,
+    role: (result.user as { role?: string }).role ?? 'user',
+  };
+
+  const activeOrgId = (result.session as { activeOrganizationId?: string })
+    .activeOrganizationId;
+
+  // Find the membership row (active org if set, else any). Loaded as OWNER-free
+  // read: this runs on the app connection but member rows are keyed by user id.
+  const rows = await db
+    .select({
+      firmId: schema.member.organizationId,
+      role: schema.member.role,
+      canEditHousePortfolios: schema.member.canEditHousePortfolios,
+      canDownload: schema.member.canDownload,
+      firmStatus: schema.organization.status,
+    })
+    .from(schema.member)
+    .innerJoin(schema.organization, eq(schema.member.organizationId, schema.organization.id))
+    .where(
+      activeOrgId
+        ? and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, activeOrgId))
+        : eq(schema.member.userId, user.id),
+    )
+    .limit(1);
+
+  const m = rows[0];
+  const membership: FirmMembership | undefined = m
+    ? {
+        firmId: m.firmId,
+        role: m.role,
+        canEditHousePortfolios: m.canEditHousePortfolios,
+        canDownload: m.canDownload,
+        firmStatus: m.firmStatus,
+      }
+    : undefined;
+
+  return { user, membership };
 }

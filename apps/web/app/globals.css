@@ -1,3 +1,6 @@
+/* Spectral — transitional serif for fund names & screen titles (prospectus lineage). */
+@import url('https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,4 +12,61 @@
 html,
 body {
   height: 100%;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Research surface — a dark "adviser's terminal". Scoped to
+   [data-surface="research"] so it never leaks into other screens
+   (admin, firm settings keep the app's default light chrome).
+   The organizing signal is the PROVIDER colour (set per row/series);
+   the chrome stays quiet so those six brand colours carry.
+   ────────────────────────────────────────────────────────────── */
+[data-surface='research'] {
+  --ground: #10171d;
+  --surface: #161f27;
+  --surface-2: #1c2832;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-soft: rgba(255, 255, 255, 0.045);
+  --ink: #e8eef2;
+  --ink-dim: #93a1ab;
+  --ink-faint: #5f6f7a;
+  --accent: #16a394; /* nSights teal — solid only on the one primary action */
+  --accent-deep: #118c7e;
+  --accent-wash: rgba(22, 163, 148, 0.12);
+  --pos: #4ec08a; /* gains */
+  --neg: #e2795f; /* losses — warm, not alarm-red */
+
+  background: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+[data-surface='research'] .serif {
+  font-family: 'Spectral', Georgia, 'Times New Roman', serif;
+}
+
+/* tabular figures everywhere numbers live */
+[data-surface='research'] .tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* thin scrollbar for the dense table */
+[data-surface='research'] *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+[data-surface='research'] *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+}
+[data-surface='research'] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-surface='research'] * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

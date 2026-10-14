@@ -22,8 +22,10 @@ export function CompareOverlay({
   onToggleMode: (m: CompareMode) => void;
 }) {
   const [growth, setGrowth] = useState<ChartPayload | null>(null);
+  const [riskRet, setRiskRet] = useState<ChartPayload | null>(null);
   const [summary, setSummary] = useState<ChartPayload | null>(null);
   const [metrics, setMetrics] = useState<ChartPayload | null>(null);
+  const [discrete, setDiscrete] = useState<ChartPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,13 +40,15 @@ export function CompareOverlay({
     setLoading(true); setError(null);
     (async () => {
       try {
-        const [g, s, m] = await Promise.all([
+        const [g, rr, s, m, da] = await Promise.all([
           getChart('growth10k', fundIds, compareMode),
+          getChart('riskReturn', fundIds, compareMode),
           getChart('comparisonSummary', fundIds, compareMode),
           getChart('keyMetrics', fundIds, compareMode),
+          getChart('discreteAnnual', fundIds, compareMode),
         ]);
         if (cancelled) return;
-        setGrowth(g); setSummary(s); setMetrics(m);
+        setGrowth(g); setRiskRet(rr); setSummary(s); setMetrics(m); setDiscrete(da);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load comparison');
       } finally {
@@ -85,8 +89,17 @@ export function CompareOverlay({
               </section>
             ) : null}
 
+            {riskRet ? (
+              <section>
+                <h3 className="serif mb-1 text-base font-medium text-[var(--ink)]">{riskRet.title}</h3>
+                <EChart payload={riskRet} height={300} />
+                <p className="mt-1.5 text-[11px] text-[var(--ink-faint)]">{riskRet.footnote}</p>
+              </section>
+            ) : null}
+
             {summary ? <TableSection title="Comparison summary" payload={summary} /> : null}
             {metrics ? <TableSection title="Key metrics" payload={metrics} /> : null}
+            {discrete ? <TableSection title="Discrete annual returns" payload={discrete} /> : null}
           </div>
         )}
       </div>
@@ -137,7 +150,7 @@ function TableSection({ title, payload }: { title: string; payload: ChartPayload
                         className={`px-3 py-2 ${c.align === 'right' ? 'tnum text-right' : 'text-left'} ${
                           isFund ? 'serif text-[var(--ink)]' : 'text-[var(--ink-dim)]'
                         }`}
-                        style={SIGNED_KEYS.has(c.key) ? { color: cellColour(v) } : undefined}
+                        style={SIGNED_KEYS.has(c.key) || isYearCol(c.key) ? { color: cellColour(v) } : undefined}
                       >
                         {formatCell(v, c.key)}
                       </td>
@@ -158,11 +171,14 @@ function TableSection({ title, payload }: { title: string; payload: ChartPayload
 const PCT_KEYS = new Set(['ytd', 'r3', 'r5', 'r7', 'vol5y', 'mdd5y']);
 const SIGNED_KEYS = new Set(['ytd', 'r3', 'r5', 'r7', 'mdd5y']); // vol is non-signed
 
+// Year columns in the discrete-annual table (y2018, y2019, …) are signed percentages.
+const isYearCol = (key: string) => /^y\d{4}$/.test(key);
+
 function formatCell(v: string | number | null, key: string): string {
   if (v == null) return '—';
   if (typeof v !== 'number') return v;
-  if (PCT_KEYS.has(key)) {
-    const sign = SIGNED_KEYS.has(key) && v > 0 ? '+' : '';
+  if (PCT_KEYS.has(key) || isYearCol(key)) {
+    const sign = (SIGNED_KEYS.has(key) || isYearCol(key)) && v > 0 ? '+' : '';
     return `${sign}${v}%`;
   }
   return String(v);

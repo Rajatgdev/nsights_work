@@ -9,9 +9,22 @@
  */
 import type { ChartKey, CompareMode } from '@nsights/shared';
 
+/** Optional per-fund facts a few charts need (charges, risk rating). */
+export interface ChartFundFacts {
+  amcPct?: number | null;
+  ongoingChargePct?: number | null;
+  riskRating?: number | null;
+}
+
 export interface ChartContext {
   versionId: string;
-  funds: { id: string; name: string; series: (number | null)[]; dates: string[] }[];
+  funds: {
+    id: string;
+    name: string;
+    series: (number | null)[];
+    dates: string[];
+    facts?: ChartFundFacts;
+  }[];
   portfolio?: { series: (number | null)[]; dates: string[] };
   compareMode: CompareMode;
   /** Common-window start index (max first-index across funds), when compareMode='common'. */

@@ -8,7 +8,60 @@ import {
 import { chargePct, historyLabel, monthYear, pctPlain, riskLabel, SFDR_LABEL } from '../lib/format';
 import { EChart } from './EChart';
 
-const SINGLE_CHARTS = ['growth10k', 'annualised', 'calendarYear', 'historicVol'] as const;
+const SINGLE_CHARTS = [
+  'growth10k', 'cumulative5y', 'annualised', 'calendarYear',
+  'historicVol', 'rolling2y', 'stressDrawdown', 'histMonthly', 'charges',
+] as const;
+
+interface TableSpec {
+  columns: { key: string; label: string; align?: 'left' | 'right' }[];
+  rows: Record<string, string | number | null>[];
+  highlightRowId?: string;
+}
+
+const PCT_COLS = new Set(['ytd', 'r3', 'r5', 'r7', 'vol5y', 'mdd5y']);
+const CHARGE_COLS = new Set(['amc', 'ocf']);
+
+function cellText(v: string | number | null, key: string): string {
+  if (v == null) return '—';
+  if (typeof v !== 'number') return v;
+  if (PCT_COLS.has(key)) return `${v}%`;
+  if (CHARGE_COLS.has(key)) return `${v}%`;
+  if (key === 'costPer10k') return `€${v}`;
+  return String(v);
+}
+
+function ChartTable({ payload }: { payload: ChartPayload }) {
+  const spec = payload.data as unknown as TableSpec;
+  return (
+    <div className="overflow-x-auto rounded-sm border border-[var(--line)]">
+      <table className="w-full border-collapse text-[13px]">
+        <thead>
+          <tr className="border-b border-[var(--line)] bg-[var(--surface)] text-[10.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+            {spec.columns.map((c) => (
+              <th key={c.key} className={`px-2.5 py-1.5 font-medium ${c.align === 'right' ? 'text-right' : 'text-left'}`}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {spec.rows.map((row, i) => (
+            <tr key={String(row.id ?? i)} className="border-b border-[var(--line-soft)]">
+              {spec.columns.map((c) => {
+                const v = row[c.key] ?? null;
+                const isFund = c.key === 'fund';
+                return (
+                  <td key={c.key} className={`px-2.5 py-1.5 ${c.align === 'right' ? 'tnum text-right' : 'text-left'} ${isFund ? 'serif text-[var(--ink)]' : 'text-[var(--ink-dim)]'}`}>
+                    {cellText(v, c.key)}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export function Inspector({
   fundId,
@@ -172,7 +225,7 @@ function ChartBlock({ payload }: { payload: ChartPayload }) {
   return (
     <figure>
       <figcaption className="serif mb-1 text-sm font-medium text-[var(--ink)]">{payload.title}</figcaption>
-      <EChart payload={payload} height={220} />
+      {payload.kind === 'table' ? <ChartTable payload={payload} /> : <EChart payload={payload} height={220} />}
       <p className="mt-1 text-[10.5px] leading-snug text-[var(--ink-faint)]">{payload.footnote}</p>
     </figure>
   );

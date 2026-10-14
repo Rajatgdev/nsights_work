@@ -274,26 +274,45 @@ funds.post('/charts/:key/data', async (c) => {
     return c.json({ error: 'no_live_version' }, 503);
   }
 
-  // Names (preserve requested order).
-  const nameRes = await db.execute(sql`
-    select id, name from fund
-     where id in (${sql.join(fundIds.map((id) => sql`${id}`), sql`, `)})
+  // Names + facts (preserve requested order). Facts feed the charges / risk charts.
+  const factRes = await db.execute(sql`
+    select f.id, f.name,
+           ffv.amc_pct, ffv.ongoing_charge_pct, ffv.risk_rating
+      from fund f
+      left join fund_fact_version ffv on ffv.fund_id = f.id and ffv.version_id = ${live.id}
+     where f.id in (${sql.join(fundIds.map((id) => sql`${id}`), sql`, `)})
   `);
-  const nameById = new Map(
-    (nameRes.rows as { id: string; name: string }[]).map((x) => [x.id, x.name]),
+  const factById = new Map(
+    (factRes.rows as Record<string, unknown>[]).map((x) => [
+      x.id as string,
+      {
+        name: x.name as string,
+        amcPct: x.amc_pct == null ? null : Number(x.amc_pct),
+        ongoingChargePct: x.ongoing_charge_pct == null ? null : Number(x.ongoing_charge_pct),
+        riskRating: x.risk_rating == null ? null : Number(x.risk_rating),
+      },
+    ]),
   );
 
   const dates = await versionDates(live.id);
   const seriesMap = await loadSeries(live.id, fundIds, dates);
 
   const ctxFunds = fundIds
-    .filter((id) => nameById.has(id))
-    .map((id) => ({
-      id,
-      name: nameById.get(id)!,
-      series: seriesMap.get(id) ?? new Array(dates.length).fill(null),
-      dates,
-    }));
+    .filter((id) => factById.has(id))
+    .map((id) => {
+      const fct = factById.get(id)!;
+      return {
+        id,
+        name: fct.name,
+        series: seriesMap.get(id) ?? new Array(dates.length).fill(null),
+        dates,
+        facts: {
+          amcPct: fct.amcPct,
+          ongoingChargePct: fct.ongoingChargePct,
+          riskRating: fct.riskRating,
+        },
+      };
+    });
 
   // Common-window start = max first-non-null index across selected funds.
   let startIndex = 0;

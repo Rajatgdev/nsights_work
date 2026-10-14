@@ -17,6 +17,7 @@
     "@nsights/commentary": "workspace:*",
     "@nsights/db": "workspace:*",
     "@nsights/export": "workspace:*",
+    "@nsights/portfolio": "workspace:*",
     "@nsights/shared": "workspace:*",
     "@nsights/ui": "workspace:*",
     "better-auth": "1.2.12",

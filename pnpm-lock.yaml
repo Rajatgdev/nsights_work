@@ -67,6 +67,9 @@ importers:
       '@nsights/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@nsights/portfolio':
+        specifier: workspace:*
+        version: link:../../packages/portfolio
       '@nsights/shared':
         specifier: workspace:*
         version: link:../../packages/shared

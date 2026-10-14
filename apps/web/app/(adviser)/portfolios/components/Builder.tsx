@@ -8,6 +8,7 @@ import {
   type FundPick, type HoldingInput,
 } from '../lib/api';
 import { BlendChart } from './BlendChart';
+import { BlendBars } from './BlendBars';
 
 const APPROACHES: { key: Approach; label: string; blurb: string }[] = [
   { key: 'core-satellite', label: 'Core / Satellite', blurb: 'A multi-asset core with focused satellites around it.' },
@@ -147,6 +148,11 @@ export function Builder({ initial }: { initial?: { id: string; name: string; kin
                 <Seg active={kind === 'house'} onClick={() => setKind('house')}>House</Seg>
               </div>
             ) : null}
+            <div className="flex items-center gap-1 text-xs">
+              <span className="pr-1 text-[var(--ink-faint)]">Rebalance</span>
+              <Seg active={rebalancing === 'monthly'} onClick={() => setRebalancing('monthly')}>Monthly</Seg>
+              <Seg active={rebalancing === 'buy-and-hold'} onClick={() => setRebalancing('buy-and-hold')}>Buy &amp; hold</Seg>
+            </div>
           </div>
 
           {/* approach */}
@@ -267,6 +273,33 @@ export function Builder({ initial }: { initial?: { id: string; name: string; kin
                   <p className="mt-1 text-[10.5px] text-[var(--ink-faint)]">History starts {analysis.historyLimitedBy.startDate ?? '—'}, limited by {analysis.historyLimitedBy.name}. Data as at {analysis.dataMonth}.</p>
                 ) : null}
               </div>
+
+              {(() => {
+                const m = analysis.metrics as {
+                  ytd?: number | null; r3?: number | null; r5?: number | null; r7?: number | null; r10?: number | null;
+                  calendarYears?: { year: number; value: number | null }[];
+                };
+                const annCats = ['YTD', '3y p.a.', '5y p.a.', '7y p.a.', '10y p.a.'];
+                const annVals = [m.ytd ?? null, m.r3 ?? null, m.r5 ?? null, m.r7 ?? null, m.r10 ?? null];
+                const cy = (m.calendarYears ?? []).slice(-9);
+                return (
+                  <>
+                    <div>
+                      <h3 className="serif mb-1 text-sm font-medium text-[var(--ink)]">Blended annualised returns</h3>
+                      <BlendBars categories={annCats} values={annVals} />
+                    </div>
+                    {cy.length > 0 ? (
+                      <div>
+                        <h3 className="serif mb-1 text-sm font-medium text-[var(--ink)]">Blended calendar-year returns</h3>
+                        <BlendBars categories={cy.map((y) => String(y.year))} values={cy.map((y) => y.value)} />
+                      </div>
+                    ) : null}
+                    <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+                      Figures from the blended monthly series, {rebalancing === 'monthly' ? 'monthly rebalanced' : 'buy-and-hold'}. Past performance is not a reliable indicator of future results.
+                    </p>
+                  </>
+                );
+              })()}
 
               {analysis.warnings.length > 0 ? (
                 <div className="rounded-sm border border-[var(--line)] p-3">

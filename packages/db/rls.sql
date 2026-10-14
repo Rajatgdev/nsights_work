@@ -105,7 +105,12 @@ BEGIN
 END$$;
 
 -- Platform-only tables: no app_user access ---------------------
-REVOKE ALL ON data_upload, platform_state FROM app_user;
+REVOKE ALL ON data_upload FROM app_user;
+
+-- platform_state: app_user needs to READ the live-version pointer
+-- (every fund query resolves live_version_id), but never writes it.
+REVOKE ALL ON platform_state FROM app_user;
+GRANT SELECT ON platform_state TO app_user;
 
 -- DML grants on tenant + audit tables (RLS still filters rows) --
 GRANT SELECT, INSERT, UPDATE, DELETE ON

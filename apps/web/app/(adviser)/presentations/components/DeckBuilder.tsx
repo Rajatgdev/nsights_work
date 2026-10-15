@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getPresentation, updatePresentation, addSlide, updateSlide, deleteSlide, reorderSlides,
-  generateCommentary, listFundsForPicker,
+  generateCommentary, listFundsForPicker, listPortfoliosForSlide,
   type PresentationDetail, type Slide, type SlideKind, type TemplateId, type CompareMode, type FundPick,
+  type PortfolioPick,
   CHART_SLIDE_KEYS,
 } from '../lib/api';
 import { SlidePreview } from './SlidePreview';
@@ -116,7 +117,7 @@ export function DeckBuilder({ id }: { id: string }) {
                 <button onClick={() => setSelected(s.id)}
                   className={`w-full rounded-sm border px-2 py-2 text-left text-xs ${selected === s.id ? 'border-[var(--accent)] bg-[var(--accent-wash)]' : 'border-[var(--line)] hover:border-[var(--ink-faint)]'}`}>
                   <span className="text-[10px] text-[var(--ink-faint)]">{i + 1}</span>
-                  <span className="ml-1.5 capitalize text-[var(--ink)]">{s.kind}{s.chartKey ? `: ${CHART_LABELS[s.chartKey] ?? s.chartKey}` : ''}</span>
+                  <span className="ml-1.5 capitalize text-[var(--ink)]">{s.kind === 'summary' ? 'Comparison summary' : `${s.kind}${s.chartKey ? `: ${CHART_LABELS[s.chartKey] ?? s.chartKey}` : ''}`}</span>
                 </button>
               </li>
             ))}
@@ -199,14 +200,23 @@ function SlideEditor({ slide, onPatch, onGenerate }: { slide: Slide; onPatch: (b
     listFundsForPicker().then((r) => { const m: Record<string, FundPick> = {}; r.funds.forEach((f) => (m[f.id] = f)); setNames(m); }).catch(() => undefined);
   }, [slide.fundIds.length]);
 
-  if (slide.kind !== 'chart') {
+  const isChartLike = slide.kind === 'chart' || slide.kind === 'summary';
+
+  if (slide.kind === 'portfolio') {
+    return <PortfolioEditor slide={slide} onPatch={onPatch} onGenerate={onGenerate} />;
+  }
+
+  if (!isChartLike) {
+    const isFirmProfile = slide.kind === 'team' || slide.kind === 'philosophy' || slide.kind === 'strategy';
     return (
       <div>
         <h3 className="serif text-sm font-medium text-[var(--ink)] capitalize">{slide.kind} slide</h3>
         <p className="mt-2 text-sm text-[var(--ink-faint)]">
           {slide.kind === 'cover' || slide.kind === 'disclaimer'
             ? 'Rendered from the deck title, client, adviser and data month.'
-            : 'This slide is laid out by the chosen template at export.'}
+            : isFirmProfile
+              ? 'Your firm’s team, philosophy and strategy are set up once in firm settings and reused across every deck. Firm admin is coming next — keep this slide to reserve its place, or remove it for now.'
+              : 'This slide is laid out by the chosen template at export.'}
         </p>
       </div>
     );
@@ -217,13 +227,20 @@ function SlideEditor({ slide, onPatch, onGenerate }: { slide: Slide; onPatch: (b
 
   return (
     <div className="space-y-5">
-      <div>
-        <h3 className="serif text-sm font-medium text-[var(--ink)]">Chart type</h3>
-        <select value={slide.chartKey ?? ''} onChange={(e) => onPatch({ chartKey: e.target.value })}
-          className="mt-1.5 h-8 w-full rounded-sm border border-[var(--line)] bg-[var(--surface-2)] px-2 text-sm text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none">
-          {CHART_SLIDE_KEYS.map((k) => <option key={k} value={k}>{CHART_LABELS[k] ?? k}</option>)}
-        </select>
-      </div>
+      {slide.kind === 'summary' ? (
+        <div>
+          <h3 className="serif text-sm font-medium text-[var(--ink)]">Comparison summary</h3>
+          <p className="mt-1 text-xs text-[var(--ink-faint)]">A side-by-side scorecard of the funds you pick below — returns, volatility, drawdown and charges.</p>
+        </div>
+      ) : (
+        <div>
+          <h3 className="serif text-sm font-medium text-[var(--ink)]">Chart type</h3>
+          <select value={slide.chartKey ?? ''} onChange={(e) => onPatch({ chartKey: e.target.value })}
+            className="mt-1.5 h-8 w-full rounded-sm border border-[var(--line)] bg-[var(--surface-2)] px-2 text-sm text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none">
+            {CHART_SLIDE_KEYS.map((k) => <option key={k} value={k}>{CHART_LABELS[k] ?? k}</option>)}
+          </select>
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between">
@@ -272,7 +289,57 @@ function SlideEditor({ slide, onPatch, onGenerate }: { slide: Slide; onPatch: (b
               className="mt-1.5 w-full rounded-sm border border-[var(--line)] bg-[var(--surface-2)] p-2 text-xs text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:outline-none" />
             <button
               onClick={async () => { setGen(true); await onGenerate(); setGen(false); }}
-              disabled={gen || !slide.chartKey || slide.fundIds.length === 0}
+              disabled={gen || (slide.kind === 'chart' && !slide.chartKey) || slide.fundIds.length === 0}
+              className="mt-1.5 rounded-sm border border-[var(--line)] px-2.5 py-1 text-xs text-[var(--accent)] hover:bg-[var(--accent-wash)] disabled:opacity-40">
+              {gen ? 'Generating…' : 'Generate commentary'}
+            </button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PortfolioEditor({ slide, onPatch, onGenerate }: { slide: Slide; onPatch: (b: Partial<Slide>) => void; onGenerate: () => Promise<void> }) {
+  const [portfolios, setPortfolios] = useState<PortfolioPick[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [gen, setGen] = useState(false);
+
+  useEffect(() => {
+    listPortfoliosForSlide().then((r) => setPortfolios(r.portfolios)).catch(() => setPortfolios([])).finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="serif text-sm font-medium text-[var(--ink)]">Portfolio</h3>
+        {loading ? <p className="mt-1 text-xs text-[var(--ink-faint)]">Loading…</p>
+          : portfolios.length === 0 ? <p className="mt-1 text-xs text-[var(--ink-faint)]">No portfolios yet — build one in Portfolios first.</p>
+          : (
+            <select value={slide.portfolioId ?? ''} onChange={(e) => onPatch({ portfolioId: e.target.value || null })}
+              className="mt-1.5 h-8 w-full rounded-sm border border-[var(--line)] bg-[var(--surface-2)] px-2 text-sm text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none">
+              <option value="">Choose a portfolio…</option>
+              {portfolios.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.kind === 'house' ? 'House' : 'Personal'} ({p.holdings})</option>)}
+            </select>
+          )}
+        <p className="mt-1.5 text-xs text-[var(--ink-faint)]">The slide shows holdings and weights, the blended growth of €10k, and the indicative risk class.</p>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between">
+          <h3 className="serif text-sm font-medium text-[var(--ink)]">Commentary</h3>
+          <label className="flex items-center gap-1 text-xs text-[var(--ink-faint)]">
+            <input type="checkbox" checked={slide.commentaryEnabled} onChange={(e) => onPatch({ commentaryEnabled: e.target.checked })} className="accent-[var(--accent)]" /> on
+          </label>
+        </div>
+        {slide.commentaryEnabled ? (
+          <>
+            <textarea value={slide.commentaryText ?? ''} onChange={(e) => onPatch({ commentaryText: e.target.value })}
+              placeholder="Generate or write commentary…" rows={4}
+              className="mt-1.5 w-full rounded-sm border border-[var(--line)] bg-[var(--surface-2)] p-2 text-xs text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:outline-none" />
+            <button
+              onClick={async () => { setGen(true); await onGenerate(); setGen(false); }}
+              disabled={gen || !slide.portfolioId}
               className="mt-1.5 rounded-sm border border-[var(--line)] px-2.5 py-1 text-xs text-[var(--accent)] hover:bg-[var(--accent-wash)] disabled:opacity-40">
               {gen ? 'Generating…' : 'Generate commentary'}
             </button>

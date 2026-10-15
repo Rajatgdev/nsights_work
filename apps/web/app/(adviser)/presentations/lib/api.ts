@@ -112,3 +112,27 @@ export const CHART_SLIDE_KEYS = [
   'rolling2y', 'historicVol', 'stressDrawdown', 'histMonthly', 'histQuarterly',
   'riskReturn', 'charges', 'keyMetrics', 'comparisonSummary',
 ] as const;
+
+// ── Portfolios (reused for the portfolio slide) ──
+export interface PortfolioPick { id: string; kind: 'house' | 'personal'; name: string; holdings: number }
+export function listPortfoliosForSlide(): Promise<{ portfolios: PortfolioPick[] }> {
+  return j<{ portfolios: Record<string, unknown>[] }>('/api/portfolios').then((r) => ({
+    portfolios: r.portfolios.map((p) => ({
+      id: p.id as string, kind: p.kind as 'house' | 'personal', name: p.name as string, holdings: Number(p.holdings),
+    })),
+  }));
+}
+
+export interface PortfolioAnalysis {
+  dataMonth: string; structure: string; riskLabel: string; averageFundRisk: number;
+  indicativeRiskClass: number | null; warnings: { code: string; message: string }[];
+  historyLimitedBy: { fundId: string; name: string; startDate: string | null } | null;
+  metrics: Record<string, unknown>; dates: string[]; blendSeries: (number | null)[];
+}
+export function analysePortfolio(portfolioId: string): Promise<PortfolioAnalysis> {
+  return j(`/api/portfolios/${portfolioId}/analyse`, { method: 'POST' });
+}
+export interface PortfolioHolding { fundId: string; weightBp: number; role?: string | null }
+export function getPortfolioHoldings(portfolioId: string): Promise<{ portfolio: { name: string; holdings: PortfolioHolding[] } }> {
+  return j(`/api/portfolios/${portfolioId}`);
+}

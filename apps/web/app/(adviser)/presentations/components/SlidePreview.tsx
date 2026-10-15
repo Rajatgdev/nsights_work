@@ -1,8 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import ReactECharts from 'echarts-for-react';
 import { EChart } from '../../research/components/EChart';
-import { getChartData, type Slide, type TemplateId, type CompareMode, type ChartPayload } from '../lib/api';
+import {
+  getChartData, analysePortfolio, getPortfolioHoldings, listFundsForPicker,
+  type Slide, type TemplateId, type CompareMode, type ChartPayload,
+  type PortfolioAnalysis, type PortfolioHolding,
+} from '../lib/api';
 
 /** Template look tokens for the 16:9 preview (mirrors @nsights/export THEMES). */
 const TEMPLATES: Record<TemplateId, { bg: string; text: string; accent: string; band: string; titleFont: string }> = {
@@ -26,16 +31,20 @@ export function SlidePreview({
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // A summary slide IS the comparisonSummary chart over its chosen funds.
+  const chartKey = slide?.kind === 'summary' ? 'comparisonSummary' : slide?.chartKey ?? null;
+  const isChartLike = slide != null && (slide.kind === 'chart' || slide.kind === 'summary');
+
   useEffect(() => {
-    if (!slide || slide.kind !== 'chart' || !slide.chartKey || slide.fundIds.length === 0) { setPayload(null); return; }
+    if (!slide || !isChartLike || !chartKey || slide.fundIds.length === 0) { setPayload(null); return; }
     let cancelled = false;
     setLoading(true); setErr(null);
-    getChartData(slide.chartKey, slide.fundIds, compareMode)
+    getChartData(chartKey, slide.fundIds, compareMode)
       .then((p) => { if (!cancelled) setPayload(p); })
       .catch((e) => { if (!cancelled) setErr(e instanceof Error ? e.message : 'Chart failed'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [slide, compareMode]);
+  }, [slide, compareMode, chartKey, isChartLike]);
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 720 }}>
@@ -60,12 +69,12 @@ export function SlidePreview({
               Past performance is not a reliable indicator of future results. Figures are from monthly unit prices and are provided for information only; they do not constitute advice. Data as at {dataMonth}.
             </p>
           </div>
-        ) : slide.kind === 'chart' ? (
+        ) : isChartLike ? (
           <div className="flex h-full flex-col px-8 py-6">
-            <h2 className="text-lg font-semibold" style={{ color: t.text }}>{payload?.title ?? (slide.chartKey ? 'Loading…' : 'Choose a chart and funds')}</h2>
+            <h2 className="text-lg font-semibold" style={{ color: t.text }}>{payload?.title ?? (chartKey ? 'Loading…' : 'Choose a chart and funds')}</h2>
             <div className="min-h-0 flex-1">
-              {!slide.chartKey || slide.fundIds.length === 0 ? (
-                <Centered><span style={{ opacity: 0.4 }}>Pick a chart type and at least one fund</span></Centered>
+              {!chartKey || slide.fundIds.length === 0 ? (
+                <Centered><span style={{ opacity: 0.4 }}>{slide.kind === 'summary' ? 'Add at least one fund to summarise' : 'Pick a chart type and at least one fund'}</span></Centered>
               ) : loading ? (
                 <Centered><span style={{ opacity: 0.5 }}>Loading…</span></Centered>
               ) : err ? (
@@ -76,10 +85,14 @@ export function SlidePreview({
             </div>
             {payload ? <p className="text-[9px] leading-tight" style={{ opacity: 0.55 }}>{payload.footnote}</p> : null}
           </div>
+        ) : slide.kind === 'portfolio' ? (
+          <PortfolioSlide slide={slide} theme={t} />
         ) : (
           <div className="flex h-full flex-col justify-center px-10">
             <h2 className="text-lg font-semibold capitalize">{slide.kind}</h2>
-            <p className="mt-2 text-sm" style={{ opacity: 0.6 }}>This slide type is laid out by the template at export.</p>
+            <p className="mt-2 max-w-md text-sm" style={{ opacity: 0.6 }}>
+              Your firm’s {slide.kind} content is set up once in firm settings and reused across every deck. That lives in firm admin, which is coming next — until then this slide renders a titled placeholder at export.
+            </p>
           </div>
         )}
         {/* footer */}
@@ -136,4 +149,102 @@ function fmtCell(v: string | number | null, key: string): string {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return <div className="flex h-full items-center justify-center text-sm">{children}</div>;
+}
+
+/** Portfolio slide: holdings table + blended growth line + indicative risk class. */
+function PortfolioSlide({ slide, theme }: { slide: Slide; theme: { text: string; accent: string } }) {
+  const [a, setA] = useState<PortfolioAnalysis | null>(null);
+  const [holdings, setHoldings] = useState<{ name: string; holdings: PortfolioHolding[] } | null>(null);
+  const [fundNames, setFundNames] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const pid = slide.portfolioId;
+  useEffect(() => {
+    if (!pid) { setA(null); setHoldings(null); return; }
+    let cancelled = false;
+    setLoading(true); setErr(null);
+    Promise.all([analysePortfolio(pid), getPortfolioHoldings(pid), listFundsForPicker()])
+      .then(([an, h, funds]) => {
+        if (cancelled) return;
+        setA(an); setHoldings(h.portfolio);
+        const m: Record<string, string> = {}; funds.funds.forEach((f) => (m[f.id] = f.name)); setFundNames(m);
+      })
+      .catch((e) => { if (!cancelled) setErr(e instanceof Error ? e.message : 'Portfolio failed'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [pid]);
+
+  if (!pid) return (
+    <div className="flex h-full flex-col justify-center px-10">
+      <h2 className="text-lg font-semibold">Portfolio</h2>
+      <p className="mt-2 text-sm" style={{ opacity: 0.5 }}>Choose a portfolio in the editor →</p>
+    </div>
+  );
+  if (loading) return <Centered><span style={{ opacity: 0.5 }}>Loading…</span></Centered>;
+  if (err) return <Centered><span style={{ color: '#b4532a' }}>{err}</span></Centered>;
+  if (!a || !holdings) return null;
+
+  const hs = [...holdings.holdings].sort((x, y) => y.weightBp - x.weightBp);
+  const blendOption = {
+    grid: { left: 2, right: 8, top: 8, bottom: 16, containLabel: true },
+    xAxis: { type: 'category', data: a.dates, axisLabel: { show: false }, axisTick: { show: false } },
+    yAxis: { type: 'value', scale: true, axisLabel: { color: '#8aa0ad', fontSize: 9 }, splitLine: { lineStyle: { color: '#ffffff10' } } },
+    series: [{ type: 'line', data: a.blendSeries, showSymbol: false, lineStyle: { width: 2, color: theme.accent }, areaStyle: { color: `${theme.accent}18` } }],
+    tooltip: { show: false },
+  };
+
+  return (
+    <div className="flex h-full flex-col px-8 py-5">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-lg font-semibold" style={{ color: theme.text }}>{holdings.name}</h2>
+        <span className="text-xs" style={{ opacity: 0.6 }}>{a.structure} · {a.riskLabel}</span>
+      </div>
+      <div className="mt-3 grid min-h-0 flex-1 grid-cols-[1.1fr_1fr] gap-5">
+        {/* holdings table */}
+        <div className="min-h-0 overflow-auto">
+          <table className="w-full text-[10px]" style={{ color: theme.text }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${theme.text}22` }}>
+                <th className="px-1 py-1 text-left" style={{ opacity: 0.6 }}>Fund</th>
+                <th className="px-1 py-1 text-right" style={{ opacity: 0.6 }}>Weight</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hs.map((h) => (
+                <tr key={h.fundId} style={{ borderBottom: `1px solid ${theme.text}11` }}>
+                  <td className="px-1 py-1 text-left">{fundNames[h.fundId] ?? h.fundId}</td>
+                  <td className="px-1 py-1 text-right tabular-nums">{(h.weightBp / 100).toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {/* blended growth + risk */}
+        <div className="flex min-h-0 flex-col">
+          <div className="flex items-baseline gap-4">
+            <div>
+              <div className="text-[9px] uppercase tracking-wide" style={{ opacity: 0.55 }}>Indicative risk class</div>
+              <div className="text-2xl font-semibold" style={{ color: theme.accent }}>{a.indicativeRiskClass ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-[9px] uppercase tracking-wide" style={{ opacity: 0.55 }}>Avg fund risk</div>
+              <div className="text-2xl font-semibold" style={{ color: theme.text }}>{a.averageFundRisk.toFixed(1)}</div>
+            </div>
+          </div>
+          <div className="mt-2 text-[9px] uppercase tracking-wide" style={{ opacity: 0.55 }}>Blended growth of €10k</div>
+          <div className="min-h-0 flex-1 rounded" style={{ background: '#121922', padding: 4, marginTop: 2 }}>
+            <ReactECharts option={blendOption} style={{ height: 120, width: '100%' }} opts={{ renderer: 'svg' }} notMerge lazyUpdate />
+          </div>
+        </div>
+      </div>
+      {a.historyLimitedBy ? (
+        <p className="mt-1 text-[9px] leading-tight" style={{ opacity: 0.55 }}>
+          Blend limited to shared history from {a.historyLimitedBy.startDate ?? '—'} ({a.historyLimitedBy.name}). Data as at {a.dataMonth}.
+        </p>
+      ) : (
+        <p className="mt-1 text-[9px] leading-tight" style={{ opacity: 0.55 }}>Data as at {a.dataMonth}.</p>
+      )}
+    </div>
+  );
 }
